@@ -1,0 +1,8 @@
+data/
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
+# Keep figures and results in git so the README renders; ignore big intermediate files
+reports/*.parquet

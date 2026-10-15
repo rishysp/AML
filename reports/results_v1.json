@@ -1,0 +1,79 @@
+{
+  "data": {
+    "transactions": 5078345,
+    "accounts_test": 356393,
+    "laundering_accounts_test": 2199,
+    "laundering_txn_rate": 0.0010194266045335635,
+    "date_range": [
+      "2022-09-01 00:00:00",
+      "2022-09-18 16:18:00"
+    ]
+  },
+  "config": {
+    "alert_budget": 0.01,
+    "target_recall": 0.8
+  },
+  "rules": {
+    "structuring": {
+      "chosen_threshold": 2.0,
+      "test_alerts": 2177,
+      "test_precision": 0.028020211299954065,
+      "test_recall": 0.02773988176443838,
+      "loosest_threshold_alerts": 5140,
+      "loosest_threshold_recall": 0.0504774897680764,
+      "alert_reduction_vs_loosest": 0.5764591439688715
+    },
+    "rapid_movement": {
+      "chosen_threshold": 250000.0,
+      "test_alerts": 322,
+      "test_precision": 0.08074534161490683,
+      "test_recall": 0.01182355616189177,
+      "loosest_threshold_alerts": 6553,
+      "loosest_threshold_recall": 0.11505229649840837,
+      "alert_reduction_vs_loosest": 0.9508622005188463
+    },
+    "fan": {
+      "chosen_threshold": 10.0,
+      "test_alerts": 1352,
+      "test_precision": 0.10798816568047337,
+      "test_recall": 0.06639381537062301,
+      "loosest_threshold_alerts": 144607,
+      "loosest_threshold_recall": 0.762619372442019,
+      "alert_reduction_vs_loosest": 0.9906505217589743
+    }
+  },
+  "models": {
+    "XGBoost + network features": {
+      "pr_auc": 0.3102750812,
+      "roc_auc": 0.8917977486,
+      "precision_at_budget": 0.2244668911,
+      "recall_at_budget": 0.3638017281,
+      "alerts_at_budget": 3564,
+      "alerts_for_80pct_recall": 76536
+    },
+    "XGBoost, no network features": {
+      "pr_auc": 0.2966096226,
+      "roc_auc": 0.8795977086,
+      "precision_at_budget": 0.2132435466,
+      "recall_at_budget": 0.3456116417,
+      "alerts_at_budget": 3564,
+      "alerts_for_80pct_recall": 81144
+    },
+    "Rules only (tuned thresholds)": {
+      "pr_auc": 0.0334961056,
+      "roc_auc": 0.7315220218,
+      "precision_at_budget": 0.0541526375,
+      "recall_at_budget": 0.0877671669,
+      "alerts_at_budget": 3564,
+      "alerts_for_80pct_recall": 157060
+    },
+    "Isolation Forest (unsupervised)": {
+      "pr_auc": 0.0283092158,
+      "roc_auc": 0.6180967308,
+      "precision_at_budget": 0.0465768799,
+      "recall_at_budget": 0.0754888586,
+      "alerts_at_budget": 3564,
+      "alerts_for_80pct_recall": 229340
+    }
+  }
+}

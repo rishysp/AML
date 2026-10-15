@@ -1,0 +1,13 @@
+model,metric,ci_low,ci_high
+XGBoost + network features,pr_auc,0.6096462695738939,0.6477799180722426
+XGBoost + network features,recall_at_budget,0.611032946366214,0.6498448158253751
+XGBoost + network features,precision_at_budget,0.3681116722783389,0.40854377104377104
+"XGBoost, no network features",pr_auc,0.496572409924819,0.5405463355915945
+"XGBoost, no network features",recall_at_budget,0.52952872123017,0.5727984471735882
+"XGBoost, no network features",precision_at_budget,0.3223835578002245,0.35721801346801346
+Isolation Forest (unsupervised),pr_auc,0.06228222574080889,0.08052529641845396
+Isolation Forest (unsupervised),recall_at_budget,0.16873293782122648,0.1999139662180764
+Isolation Forest (unsupervised),precision_at_budget,0.1040895061728395,0.12262906846240179
+Rules only (tuned thresholds),pr_auc,0.03093084937223635,0.04173210388405925
+Rules only (tuned thresholds),recall_at_budget,0.11121156058676727,0.13609243295019158
+Rules only (tuned thresholds),precision_at_budget,0.06874298540965208,0.08445566778900113

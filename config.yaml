@@ -1,0 +1,99 @@
+# AML Transaction Monitoring - pipeline configuration
+# Every tunable number lives here so the white paper can cite one place.
+
+data:
+  # Download HI-Small_Trans.csv from the Kaggle dataset
+  # "IBM Transactions for Anti Money Laundering (AML)".
+  # On a Kaggle notebook you can point straight at /kaggle/input/<dataset>/HI-Small_Trans.csv
+  raw_csv: data/raw/HI-Small_Trans.csv
+  processed: data/processed/transactions.parquet
+  base_currency: US Dollar
+  # Optional: limit rows while developing (null = all rows)
+  nrows: null
+
+split:
+  # The timeline is cut into equal-size windows (equal transaction counts) so every
+  # account-period is on the same scale. Last window = test, second-last = validation,
+  # all earlier windows = training samples. Chronological; never shuffled.
+  n_windows: 5
+
+scenarios:
+  structuring:
+    # Mirrors a $10,000 reporting threshold; transactions just under it are suspicious
+    reporting_threshold: 10000
+    band_lower_frac: 0.9          # band = [0.9 * threshold, threshold)
+    threshold_grid: [1, 2, 3, 4, 5, 6, 8, 10]          # min count of in-band txns
+  rapid_movement:
+    window_days: 3
+    passthrough_ratio_min: 0.8    # outflow / inflow inside the window
+    passthrough_ratio_max: 1.2
+    threshold_grid: [1000, 5000, 10000, 25000, 50000, 100000, 250000]  # min inflow (USD)
+  fan:
+    threshold_grid: [2, 3, 5, 8, 10, 15, 20, 30, 50]  # min unique counterparties (in or out)
+
+tuning:
+  # Investigator capacity: share of accounts that can be alerted and reviewed
+  alert_budget: 0.01
+  # Recall target used to report "alerts needed to catch X% of laundering accounts"
+  target_recall: 0.8
+  # Below-the-line testing: number of bands below the chosen threshold to sample
+  btl_bands: 3
+
+graph:
+  # Features averaged over each account's counterparties (label-free neighbour signal)
+  neighbor_cols: [fan, g_in_degree, g_out_degree, g_community_size, g_pagerank, g_cycles3,
+                  fmt_ach, cross_currency_share, near_threshold_count, burst_in_1h, share_out_within_24h_of_in]
+  pagerank: true
+  louvain: true        # community detection; set false if it is slow on your machine
+  louvain_seed: 42
+
+models:
+  random_state: 42
+  xgboost:
+    n_estimators: 600
+    learning_rate: 0.05
+    max_depth: 6
+    subsample: 0.8
+    colsample_bytree: 0.8
+    eval_metric: aucpr
+    early_stopping_rounds: 50
+    tree_method: hist
+    device: cpu   # set to cuda on a GPU machine (e.g. a Kaggle GPU notebook)
+  history:
+    # Prior-case features: exposure to accounts labelled laundering in an earlier window.
+    # label_lag_windows = 2 means a window only sees labels from 2+ windows back,
+    # so the window just before it (still "under investigation") is never used.
+    # Tested in v3 and OFF by default: test PR-AUC 0.623 with vs 0.630 without
+    # (paired bootstrap, significant). See reports/experiments/v3_case_history/.
+    enabled: false
+    label_lag_windows: 2
+  search:
+    n_trials: 10          # random-search trials scored on validation PR-AUC
+    max_rounds: 2000      # cap when re-finding the best round count for the chosen settings
+    refit_round_factor: 1.15  # extra boosting rounds when refitting on train + validation
+  # Features excluded from all models. self_transfer: PSI 1.38 between train and test
+  # (severe drift) and removing it left test PR-AUC unchanged (0.632 -> 0.630).
+  drop_features: [self_transfer]
+  stability_seeds: [7, 11]   # extra refits with different seeds to measure run-to-run spread
+  bootstrap_reps: 200
+  isolation_forest:
+    n_estimators: 300
+    contamination: auto
+
+gnn:
+  # Directional GraphSAGE experiment (scripts/run_gnn.py). Run run_pipeline.py first:
+  # the GNN reuses its cached windows and is compared on the same test accounts.
+  hidden: 128
+  layers: 2
+  dropout: 0.2
+  lr: 0.003
+  weight_decay: 0.00001
+  pos_weight_mode: sqrt   # full | sqrt | none
+  max_epochs: 300
+  patience: 25
+  seeds: [42, 7, 11]      # refits with different seeds, to report run-to-run spread
+  ensemble_weight: 0.5    # fixed in advance (not tuned on test): rank-average of GNN and XGBoost
+
+outputs:
+  reports_dir: reports
+  figures_dir: reports/figures

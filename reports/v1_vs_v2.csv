@@ -1,0 +1,7 @@
+model,metric,v1,v2
+XGBoost + network features,pr_auc,0.3102750812,0.6290061604
+XGBoost + network features,recall_at_budget,0.3638017281,0.6302864939
+XGBoost + network features,precision_at_budget,0.2244668911,0.3888888889
+Rules only (tuned thresholds),pr_auc,0.0334961056,0.0358918077
+Rules only (tuned thresholds),recall_at_budget,0.0877671669,0.1227830832
+Rules only (tuned thresholds),precision_at_budget,0.0541526375,0.0757575758
