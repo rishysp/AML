@@ -93,16 +93,5 @@ Locally: `pip install torch`, then `python scripts/run_gnn.py` after `run_pipeli
 | v3 | Prior-case history features (2-window label lag) | 0.62 | Dropped: significantly worse PR-AUC; only one training window had history, so the model overfit it |
 | v3 | Boosting-round cap 600 to 2000 | 0.63 | No change; the best count was about 600-700 |
 
-Details: `reports/experiments/v3_case_history/`. The history code stays in `src/aml/history.py`, switched off in `config.yaml`. Negative results are part of the model record and belong in the white paper.
 
-## 7-day plan
-
-| Day | Work |
-|---|---|
-| 1 | Set up the environment, pass the tests, download data, run the EDA notebook |
-| 2 | Quick run with `--nrows 500000`; sanity-check scenario scores and sweeps |
-| 3 | Full run; adjust threshold grids in `config.yaml` if the sweeps are flat |
-| 4 | Review model comparison and feature importance; try one improvement |
-| 5 | Write the white paper |
-| 6 | README results section, charts, clean up the repo, push to GitHub |
 | 7 | Copy bullets into the resume; prepare a 2-minute walkthrough for interviews |
