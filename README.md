@@ -92,6 +92,3 @@ Locally: `pip install torch`, then `python scripts/run_gnn.py` after `run_pipeli
 | v2 | Equal windows, new features, tuning, drift fix | **0.63** | Kept |
 | v3 | Prior-case history features (2-window label lag) | 0.62 | Dropped: significantly worse PR-AUC; only one training window had history, so the model overfit it |
 | v3 | Boosting-round cap 600 to 2000 | 0.63 | No change; the best count was about 600-700 |
-
-
-| 7 | Copy bullets into the resume; prepare a 2-minute walkthrough for interviews |
