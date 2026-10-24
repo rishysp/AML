@@ -7,7 +7,7 @@ window features, edges and the saved XGBoost test scores):
     python scripts/run_gnn.py      --config CONFIG          # --device cuda on a GPU
 
 Outputs in <reports>/gnn/: results_gnn.json, model_comparison_gnn.csv,
-paired_differences_gnn.csv, training_history.csv, figures/, resume_bullets_gnn.md
+paired_differences_gnn.csv, training_history.csv, figures/, summary_gnn.md
 """
 from __future__ import annotations
 
@@ -39,7 +39,8 @@ def _rank(s: np.ndarray) -> np.ndarray:
     return pd.Series(s).rank(pct=True).to_numpy()
 
 
-def write_bullets(res: dict, path: Path) -> None:
+def write_summary(res: dict, path: Path) -> None:
+    """Write `summary_gnn.md`. A GNN gain is claimed only if the paired bootstrap supports it."""
     m, diffs = res["models"], {(d["comparison"], d["metric"]): d for d in res["paired_differences"]}
     n_tx = res["data"].get("transactions")
     n_txt = f"{n_tx / 1e6:.1f}M" if n_tx else "the"
@@ -52,27 +53,26 @@ def write_bullets(res: dict, path: Path) -> None:
             m[a]["recall_at_budget"] > x["recall_at_budget"]
 
     best = ENS if sig(ENS) and e["recall_at_budget"] >= g["recall_at_budget"] else (GNN if sig(GNN) else None)
-    lines = ["# GNN resume bullet drafts (auto-generated from gnn/results_gnn.json)", ""]
+    lines = ["# GNN benchmark: key findings (generated from gnn/results_gnn.json)", ""]
     if best:
         b = m[best]
         lines.append(
-            f"- Built a directional GraphSAGE graph neural network in PyTorch ({hw}) on {n_txt} synthetic "
-            f"transactions ({ds}); {'combined with XGBoost, it' if best == ENS else 'it'} raised recall at a "
-            f"1% alert budget from {x['recall_at_budget']:.0%} to {b['recall_at_budget']:.0%} "
-            f"(PR-AUC {x['pr_auc']:.2f} to {b['pr_auc']:.2f}), significant in a paired bootstrap.")
+            f"- A directional GraphSAGE GNN (PyTorch, {hw}) on {n_txt} synthetic transactions ({ds}) "
+            f"{'combined with XGBoost ' if best == ENS else ''}raised recall at a 1% alert budget from "
+            f"{x['recall_at_budget']:.1%} to {b['recall_at_budget']:.1%} (PR-AUC {x['pr_auc']:.3f} to "
+            f"{b['pr_auc']:.3f}), significant in a paired bootstrap.")
     else:
         lines.append(
-            f"- Benchmarked a directional GraphSAGE graph neural network in PyTorch ({hw}) against XGBoost on "
-            f"{n_txt} synthetic transactions ({ds}): PR-AUC {g['pr_auc']:.2f} vs {x['pr_auc']:.2f}, with no "
-            f"significant recall gain, so kept the simpler, more explainable model.")
+            f"- A directional GraphSAGE GNN (PyTorch, {hw}) on {n_txt} synthetic transactions ({ds}) showed "
+            f"no significant recall gain over XGBoost (PR-AUC {g['pr_auc']:.3f} vs {x['pr_auc']:.3f}); the "
+            f"simpler, more explainable XGBoost model is preferred.")
     lines += [
         "",
         f"Recall at 1% budget: XGBoost {x['recall_at_budget']:.1%}, GNN {g['recall_at_budget']:.1%}, "
         f"ensemble {e['recall_at_budget']:.1%}.",
         f"GNN seed spread (PR-AUC sd): {res['gnn_seed_pr_auc']['std']:.4f}.",
         "",
-        "Only use the 'raised recall' version if the script wrote it: it checks significance for you.",
-        "A well-run benchmark that keeps the simpler model is a good interview story too.",
+        "Compare models within one test window only; absolute scores depend on the window's length and base rate.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -186,7 +186,7 @@ def main(cfg_path: Path, device_arg: str) -> dict:
         "gnn_seed_pr_auc": {"values": seed_pr, "mean": float(np.mean(seed_pr)), "std": float(np.std(seed_pr))},
     }
     (out / "results_gnn.json").write_text(json.dumps(res, indent=2))
-    write_bullets(res, out / "resume_bullets_gnn.md")
+    write_summary(res, out / "summary_gnn.md")
     print(diffs.round(4).to_string())
     log(f"done. See {out}")
     return res

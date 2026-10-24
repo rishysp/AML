@@ -11,7 +11,9 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
 else
   echo "NOT RUNNING"
   grep -q "FINISHED" "$LOG" 2>/dev/null && echo "-> finished: $(ls "$WORKDIR"/aml_results_*.zip 2>/dev/null | tr '\n' ' ')"
-  grep -E "^STOPPED|^ERROR" "$LOG" 2>/dev/null | tail -2
+  if grep -q "^STOPPED" "$LOG" 2>/dev/null; then
+    echo "--- last log lines (the error is usually here)"; tr '\r' '\n' < "$LOG" | grep -v '%|' | tail -15
+  fi
 fi
 echo "--- memory"; free -g | head -2
 command -v nvidia-smi >/dev/null && { echo "--- GPU"; nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader; }

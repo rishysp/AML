@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from aml import (data, evaluate, features, graph_features, history, models,  # noqa: E402
                  robustness, scenarios, tuning, viz)
-from aml.report import write_resume_bullets  # noqa: E402
+from aml.report import write_summary  # noqa: E402
 
 VERSION = 3
 FULL = "XGBoost + network features"
@@ -437,7 +437,7 @@ def main(cfg_path: Path, nrows: int | None, reuse_search: bool = False) -> dict:
             rows.append(row)
     pd.DataFrame(rows).to_csv(reports / "version_history.csv", index=False)
 
-    write_resume_bullets(results, reports / "resume_bullets.md")
+    write_summary(results, reports / "summary.md")
     log(f"done. See {reports}", t0)
     return results
 

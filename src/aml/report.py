@@ -1,10 +1,11 @@
-"""Turn results.json into resume-ready bullet drafts, filled with your real numbers."""
+"""Plain-language summary of a run's key findings, generated from results.json."""
 from __future__ import annotations
 
 from pathlib import Path
 
 FULL = "XGBoost + network features"
 NO_GRAPH = "XGBoost, no network features"
+NO_HIST = "XGBoost, no case-history features"
 RULES = "Rules only (tuned thresholds)"
 
 
@@ -12,7 +13,8 @@ def _p(x: float) -> str:
     return f"{x * 100:.0f}%"
 
 
-def write_resume_bullets(results: dict, path: Path) -> Path:
+def write_summary(results: dict, path: Path) -> Path:
+    """Write `summary.md`. Claims are worded by their statistical support, never stronger."""
     m = results["models"]
     best, ng, rules = m[FULL], m[NO_GRAPH], m[RULES]
     budget = results["config"]["alert_budget"]
@@ -26,53 +28,44 @@ def write_resume_bullets(results: dict, path: Path) -> Path:
     seeds = results.get("seed_stability_pr_auc", {})
     stab = results.get("temporal_stability_train_only_model", {})
 
-    rec_txt = f"{_p(best['recall_at_budget'])}"
+    rec_txt = _p(best["recall_at_budget"])
     if rec_ci:
         rec_txt += f" (95% CI {_p(rec_ci[0])}-{_p(rec_ci[1])})"
 
     lines = [
-        "# Resume bullet drafts (auto-generated from reports/results.json)",
+        "# Key findings (generated from results.json)",
         "",
-        "Pick 3-4. Every number comes from your own held-out test window.",
-        "",
-        f"- Built an account-level AML transaction monitoring pipeline in Python on {n_tx_s} synthetic "
-        f"bank transactions (IBM AML dataset), using equal-size chronological windows so thresholds and "
-        f"models transfer between periods.",
-        f"- At a {_p(budget)} investigator alert budget, the tuned XGBoost model caught {rec_txt} of "
+        f"- **Data:** {n_tx_s} synthetic bank transactions (IBM AML dataset), split into equal-size "
+        f"chronological windows; results are for the held-out test window.",
+        f"- **Model vs rules:** at a {_p(budget)} investigator alert budget, XGBoost caught {rec_txt} of "
         f"laundering accounts at {_p(best['precision_at_budget'])} precision, versus "
         f"{_p(rules['recall_at_budget'])} recall and {_p(rules['precision_at_budget'])} precision for "
         f"tuned rules: {ratio:.1f}x the detections for the same workload.",
-        f"- Engineered network features with NetworkX and sparse matrices (Louvain communities, PageRank, "
-        f"reciprocity, 3-cycles, counterparty aggregates); recall at budget "
-        f"{_p(ng['recall_at_budget'])} without them vs {_p(best['recall_at_budget'])} with them"
+        f"- **Network features:** recall at budget {_p(ng['recall_at_budget'])} without them vs "
+        f"{_p(best['recall_at_budget'])} with them"
         + (" (significant in a paired bootstrap)." if graph_sig else
-           " (NOT significant in a paired bootstrap: soften or drop this claim)."),
+           " (not significant in a paired bootstrap)."),
     ]
-    no_hist = m.get("XGBoost, no case-history features")
+    no_hist = m.get(NO_HIST)
     if no_hist:
-        hist_sig = diffs.get((f"{FULL} minus XGBoost, no case-history features", "recall_at_budget"),
-                             {}).get("significant")
+        hist_sig = diffs.get((f"{FULL} minus {NO_HIST}", "recall_at_budget"), {}).get("significant")
         lag = results.get("history", {}).get("label_lag_windows")
         lines.append(
-            f"- Added prior-case features (exposure to accounts confirmed as laundering at least {lag} "
-            f"windows earlier, mimicking investigation lag); recall at budget "
-            f"{_p(no_hist['recall_at_budget'])} without them vs {_p(best['recall_at_budget'])} with them"
-            + (" (significant)." if hist_sig else " (NOT significant: drop this claim).")
+            f"- **Prior-case features** (exposure to accounts confirmed at least {lag} windows earlier): "
+            f"recall at budget {_p(no_hist['recall_at_budget'])} without them vs "
+            f"{_p(best['recall_at_budget'])} with them"
+            + (" (significant)." if hist_sig else " (not significant).")
         )
     if seeds and stab:
         lines.append(
-            f"- Validated durability with 95% bootstrap CIs, seed reruns (PR-AUC sd "
-            f"{seeds['std']:.3f}), validation-vs-test stability (PR-AUC {stab['val']['pr_auc']:.2f} vs "
-            f"{stab['test']['pr_auc']:.2f}) and PSI feature-drift monitoring."
+            f"- **Stability:** PR-AUC SD across seeds {seeds['std']:.4f}; a model trained only on the "
+            f"training windows scored PR-AUC {stab['val']['pr_auc']:.2f} on validation and "
+            f"{stab['test']['pr_auc']:.2f} on test."
         )
     lines += [
-        "- Implemented structuring, rapid-movement and fan-in/fan-out scenarios with thresholds tuned "
-        "against the alert budget and checked with below-the-line testing.",
         "",
-        "## Sanity checks",
-        "",
-        "- Say 'synthetic' when describing the data.",
-        "- If the validation and test PR-AUC differ a lot, mention it as a limitation, not a strength.",
+        "Details: `model_comparison_test.csv`, `paired_differences_test.csv`, `bootstrap_ci_test.csv`, "
+        "`figures/`. A large validation-test gap is a limitation to investigate, not a strength.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

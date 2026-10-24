@@ -115,7 +115,7 @@ def test_end_to_end(tmp_path, monkeypatch):
 
     results = run_pipeline.main(cfg_path, None)
     assert "XGBoost + network features" in results["models"]
-    assert (tmp_path / "reports" / "resume_bullets.md").exists()
+    assert (tmp_path / "reports" / "summary.md").exists()
     assert (tmp_path / "reports" / "fig" / "pr_curves.png").exists()
 
     # GNN experiment on the same cached windows (skipped if PyTorch is not installed)
@@ -129,4 +129,4 @@ def test_end_to_end(tmp_path, monkeypatch):
     cfg_path.write_text(yaml.safe_dump(cfg))
     res = run_gnn.main(cfg_path, "cpu")
     assert "GraphSAGE GNN" in res["models"] and "Ensemble (GNN + XGBoost)" in res["models"]
-    assert (tmp_path / "reports" / "gnn" / "resume_bullets_gnn.md").exists()
+    assert (tmp_path / "reports" / "gnn" / "summary_gnn.md").exists()

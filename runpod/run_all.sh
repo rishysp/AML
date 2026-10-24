@@ -156,7 +156,7 @@ print(f"results: {zp} ({pathlib.Path(zp).stat().st_size / 1e6:.1f} MB)")
 EOF
 cat "$OUT/model_comparison_test.csv" || true; echo
 cat "$OUT/gnn/model_comparison_gnn.csv" || true; echo
-cat "$OUT/gnn/resume_bullets_gnn.md" || true
+cat "$OUT/gnn/summary_gnn.md" || true
 say "FINISHED. Download $ZIP, then TERMINATE the pod (see RUNPOD.md, Part G)"
 
 if [ "$AUTO_STOP" = "1" ] && [ -n "${RUNPOD_POD_ID:-}" ] && command -v runpodctl >/dev/null 2>&1; then

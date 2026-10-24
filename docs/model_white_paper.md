@@ -18,7 +18,7 @@ On a held-out test period of 356,393 accounts, with investigators reviewing 1% o
 | | Laundering accounts caught (recall) | Alerts that are laundering (precision) |
 |---|---|---|
 | Rules only, tuned | 12.3% | 7.6% |
-| **XGBoost model** | **63.2%** (95% CI 61.1-65.1%) | **39.0%** (95% CI 36.9-41.0%) |
+| **XGBoost model** | **63.0%** (95% CI 61.1-65.0%) | **38.9%** (95% CI 36.8-40.9%) |
 
 The model finds about 5x as many laundering accounts as the rules for the same investigator workload. The gap is statistically significant (paired bootstrap, 200 resamples). Results come from synthetic data and must be revalidated on production data before any use (Section 6).
 
@@ -103,7 +103,7 @@ Each scenario produces a score per account; an alert fires when the score reache
 
 | Alternative | Outcome | Decision |
 |---|---|---|
-| Isolation Forest (unsupervised) | Test PR-AUC 0.072, recall at budget 18.2% | Kept only as a benchmark. It flags accounts that are unusual, which here is mostly legitimate high activity. |
+| Isolation Forest (unsupervised) | Test PR-AUC 0.072, recall at budget 18.5% | Kept only as a benchmark. It flags accounts that are unusual, which here is mostly legitimate high activity. |
 | Transaction-level model | Not built | Investigators review accounts, not payments. |
 | `self_transfer` feature | Severe drift between train and test (PSI 1.38). Removing it moved test PR-AUC from 0.632 to 0.630. | Removed: drift risk with no benefit. |
 | Prior-case history features (exposure to accounts confirmed in a window at least 2 windows earlier) | PR-AUC 0.623 with them vs 0.630 without (significant). Recall difference not significant. | Rejected. Only one training window had history, so the model overfit it. Worth retesting with a longer history. |
@@ -137,7 +137,7 @@ Below-the-line (BTL) testing samples accounts just under each threshold. If they
 In every scenario, the band just below the line is markedly less productive than the alerted population, so the thresholds are not set too high. This was not true in v1, where the rapid-movement band just below the threshold matched the alerted rate (8.3% vs 8.1%). That finding led to the redesign in Section 3.1.
 
 ### 4.4 Interpretation
-Individually, the rules have low recall (1-9%), consistent with the high false-positive rates typical of rule-based monitoring. They remain useful as explainable typology coverage and as inputs to the model. Two of the three rule scores, structuring and near-threshold counts, are among the model's top features.
+Individually, the rules have low recall (1-9%), consistent with the high false-positive rates typical of rule-based monitoring. They remain useful as explainable typology coverage and as model inputs, although the model leans more on currency, payment-channel and network behaviour: no rule score is among its ten most important features.
 
 ## 5. Performance (held-out test window)
 
@@ -145,9 +145,9 @@ Individually, the rules have low recall (1-9%), consistent with the high false-p
 
 | Model | PR-AUC | Recall at budget | Precision at budget | Alerts needed to catch 80% |
 |---|---|---|---|---|
-| **XGBoost with network features** | **0.630** | **63.2%** | **39.0%** | **14,054 (3.9% of accounts)** |
-| XGBoost without network features | 0.517 | 55.0% | 34.0% | 20,542 |
-| Isolation Forest (unsupervised) | 0.072 | 18.2% | 11.2% | 104,896 |
+| **XGBoost with network features** | **0.629** | **63.0%** | **38.9%** | **14,010 (3.9% of accounts)** |
+| XGBoost without network features | 0.518 | 55.1% | 34.0% | 21,002 |
+| Isolation Forest (unsupervised) | 0.072 | 18.5% | 11.4% | 105,964 |
 | Rules only, tuned | 0.036 | 12.3% | 7.6% | 157,060 |
 
 Base rate (a random ranking): PR-AUC 0.006. Charts: `figures/pr_curves.png` and `figures/alert_efficiency.png`.
@@ -159,29 +159,29 @@ Base rate (a random ranking): PR-AUC 0.006. Charts: `figures/pr_curves.png` and 
 
 | Comparison | Metric | Difference | 95% CI | Significant |
 |---|---|---|---|---|
-| Model vs rules | Recall at budget | +50.8 pts | +48.8 to +53.2 | Yes |
-| Network features (with vs without) | Recall at budget | +8.2 pts | +6.6 to +9.8 | Yes |
-| Network features (with vs without) | PR-AUC | +0.113 | +0.100 to +0.128 | Yes |
+| Model vs rules | Recall at budget | +50.6 pts | +48.6 to +52.7 | Yes |
+| Network features (with vs without) | Recall at budget | +8.0 pts | +6.5 to +9.3 | Yes |
+| Network features (with vs without) | PR-AUC | +0.112 | +0.099 to +0.127 | Yes |
 
 ### 5.3 Stability
-- **Across random seeds.** Three refits with different seeds: PR-AUC 0.630, standard deviation 0.0008.
-- **Across time.** A model trained on the three training windows only scored PR-AUC 0.535 on validation and 0.618 on test. The difference reflects variation between periods rather than a trend, but it means a single period's result can move by about 0.08 PR-AUC. Performance should be judged over several periods.
-- **Refit contribution.** The train-only model scores 0.618 on test and the refitted model 0.630, so the gain is not explained by the extra validation data.
+- **Across random seeds.** Three refits with different seeds: PR-AUC 0.629, standard deviation 0.0009.
+- **Across time.** A model trained on the three training windows only scored PR-AUC 0.534 on validation and 0.618 on test. The difference reflects variation between periods rather than a trend, but it means a single period's result can move by about 0.08 PR-AUC. Performance should be judged over several periods.
+- **Refit contribution.** The train-only model scores 0.618 on test and the refitted model 0.629, so the gain is not explained by the extra validation data.
 
 ### 5.4 What drives the model
 Top features by importance:
-1. Unique currencies sent
-2. Unique currencies received
+1. Unique currencies received
+2. Unique currencies sent
 3. Share of incoming payments by ACH
 4. Cross-currency share of an account's senders (network)
 5. Share of outgoing payments by ACH
-6. Structuring score (rule)
-7. Near-threshold payment count
+6. Peak hourly outgoing burst
+7. Number of distinct senders (network in-degree)
 8. Cross-currency share
 9. ACH share of an account's senders (network)
-10. Peak daily outgoing burst
+10. Cross-bank share
 
-These match recognised typologies: currency layering, a channel with concentrated risk, structuring, and bursts of activity. No single feature dominates. The full chart is `figures/feature_importance.png`, with network features in green.
+These match recognised typologies: currency layering, a channel with concentrated risk, bursts of activity, and breadth of counterparties. No single feature dominates. The full chart is `figures/feature_importance.png`, with network features in green.
 
 ## 6. Assumptions and limitations
 
@@ -191,7 +191,7 @@ These match recognised typologies: currency layering, a channel with concentrate
 | Label = any laundering transaction in the window | Real labels come from investigations and are delayed and incomplete | Train on investigation outcomes in production; test label-lag sensitivity |
 | Short history (18 days) | Too little history for long-horizon behaviour or prior-case features (Section 3.4) | Retest on a longer dataset (Section 8) |
 | Windows of unequal duration (21 hours to 10 days) | Time-based features such as activity span mean different things across windows | Count-based scaling is controlled; duration-normalised features are a candidate improvement |
-| Period-to-period variation (validation 0.535 vs test 0.618) | A single period can mislead | Monitor over multiple periods; set alert-volume triggers (Section 7) |
+| Period-to-period variation (validation 0.534 vs test 0.618) | A single period can mislead | Monitor over multiple periods; set alert-volume triggers (Section 7) |
 | Accounts are evaluated within a window | Behaviour spanning a window boundary is split | Overlapping windows are a candidate improvement |
 | Fixed 1% alert budget | Capacity varies in practice | Precision and recall curves are provided for other budgets |
 
@@ -201,12 +201,12 @@ These match recognised typologies: currency layering, a channel with concentrate
 |---|---|---|
 | Alert volume | Alerts per window vs budget | Moves more than 25% from expected for two consecutive periods |
 | Alert productivity | Share of alerts escalated after review | Drops below the agreed floor (start with the validated precision of about 35%) |
-| Feature drift | PSI per feature, each period | PSI above 0.25 for any top-20 feature (currently all at or below 0.18) |
+| Feature drift | PSI per feature, each period | PSI above 0.25 for any top-20 feature (currently all at or below 0.20) |
 | Score drift | PSI of the model score | PSI above 0.25 |
 | Below-the-line productivity | Sample just below each rule threshold | Laundering rate in the first band below reaches 75% of the alerted rate |
 | Full revalidation | Independent review | Annually, or after any trigger |
 
-At validation, the largest feature drift was moderate: maximum received amount (PSI 0.18) and hourly or daily bursts (0.11-0.14). Everything else was stable. `reports/feature_drift_psi.csv` is the baseline for future monitoring.
+At validation, the largest feature drift was moderate: mean and maximum received amount (PSI 0.20 and 0.18) and cross-bank share (0.14). Everything else was stable. `reports/feature_drift_psi.csv` is the baseline for future monitoring.
 
 ## 8. Scale-up and graph neural network benchmark (HI-Medium)
 
