@@ -45,7 +45,38 @@ RULES = "Rules only (tuned thresholds)"
 
 
 def log(msg: str, t0: float) -> None:
-    print(f"[{time.time() - t0:7.1f}s] {msg}", flush=True)
+    """Timestamped progress line with peak memory, so a silent out-of-memory kill is easy to place."""
+    try:
+        import resource
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # KB -> GB on Linux
+        mem = f" | peak RAM {peak:.1f} GB"
+    except ImportError:  # Windows
+        mem = ""
+    print(f"[{time.time() - t0:7.1f}s] {msg}{mem}", flush=True)
+
+
+class Stages:
+    """Checkpoints for the slow model stages, so a rerun after a crash resumes instead of restarting.
+
+    Each stage's test scores are saved as .npy next to a key describing exactly what produced them
+    (settings, rounds, columns, windows). A stage is reused only if its key matches.
+    """
+
+    def __init__(self, root: Path, key: dict, enabled: bool):
+        self.root, self.enabled = root, enabled
+        self.key = json.dumps(key, sort_keys=True, default=str)
+        root.mkdir(parents=True, exist_ok=True)
+
+    def get(self, name: str, compute, t0: float):
+        f, k = self.root / f"{name}.npy", self.root / f"{name}.key"
+        if self.enabled and f.exists() and k.exists() and k.read_text() == self.key:
+            log(f"stage '{name}': reused checkpoint", t0)
+            return np.load(f, allow_pickle=False)
+        out = np.asarray(compute())
+        np.save(f, out)
+        k.write_text(self.key)
+        log(f"stage '{name}': done", t0)
+        return out
 
 
 def build_period(df: pd.DataFrame, cfg: dict) -> dict:
@@ -86,6 +117,44 @@ def load_or_build_period(df: pd.DataFrame, cfg: dict, cache: Path, name: str) ->
     p["labels"].to_frame().to_parquet(files["labels"])
     p["scenarios"].to_parquet(files["scenarios"])
     return p
+
+
+CACHE_PARTS = ["X", "labels", "scenarios", "edges"]
+_POOL_STATE: dict = {}  # set before forking so worker processes inherit the windows without pickling
+
+
+def _cache_complete(cache: Path, name: str) -> bool:
+    return all((cache / f"{name}_{k}.parquet").exists() for k in CACHE_PARTS)
+
+
+def _build_window_worker(i: int) -> str:
+    st = _POOL_STATE
+    load_or_build_period(st["windows"][i], st["cfg"], st["cache"], st["names"][i])
+    return st["names"][i]
+
+
+def prebuild_windows(windows, names, cfg, cache: Path, workers: int, t0: float) -> None:
+    """Build and cache the features of several windows at once (Linux only, uses fork).
+
+    Feature building is single-threaded pandas, so a multi-core machine finishes N windows at a time.
+    Each worker writes its window to the cache; the main loop then just loads them.
+    """
+    todo = [i for i, n in enumerate(names) if not _cache_complete(cache, n)]
+    if workers <= 1 or len(todo) <= 1:
+        return
+    import multiprocessing as mp
+    try:
+        ctx = mp.get_context("fork")
+    except ValueError:  # Windows has no fork: fall back to sequential building
+        log("parallel feature building needs Linux; building windows one at a time", t0)
+        return
+    cache.mkdir(parents=True, exist_ok=True)
+    _POOL_STATE.update(windows=windows, names=names, cfg=cfg, cache=cache)
+    log(f"building features for {len(todo)} windows with {workers} worker processes", t0)
+    with ctx.Pool(workers, maxtasksperchild=1) as pool:
+        for k, name in enumerate(pool.imap_unordered(_build_window_worker, todo), 1):
+            log(f"  window {name} built ({k}/{len(todo)})", t0)
+    _POOL_STATE.clear()
 
 
 def is_network(col: str) -> bool:
@@ -132,6 +201,7 @@ def main(cfg_path: Path, nrows: int | None, reuse_search: bool = False) -> dict:
     windows = data.equal_windows(df, n_windows)
     del df
     names = [f"train_{i}" for i in range(len(windows) - 2)] + ["val", "test"]
+    prebuild_windows(windows, names, cfg, cache, int(cfg["split"].get("workers", 1) or 1), t0)
     periods = {}
     hcfg = mcfg.get("history", {"enabled": False})
     lag = int(hcfg.get("label_lag_windows", 2))
@@ -150,6 +220,15 @@ def main(cfg_path: Path, nrows: int | None, reuse_search: bool = False) -> dict:
     del windows
     gc.collect()
     train_names = [n for n in names if n.startswith("train_")]
+    cap = cfg["split"].get("max_train_windows")
+    if cap and len(train_names) > cap:
+        # Optional memory/time safety valve: keep only the most recent training windows
+        for n in train_names[:-cap]:
+            periods.pop(n)
+        log(f"using the {cap} most recent of {len(train_names)} training windows (split.max_train_windows)", t0)
+        train_names = train_names[-cap:]
+        names = train_names + ["val", "test"]
+        gc.collect()
 
     # 2. Rule scenarios: thresholds tuned on validation (same window size as test)
     rules, chosen = {}, {}
@@ -187,8 +266,9 @@ def main(cfg_path: Path, nrows: int | None, reuse_search: bool = False) -> dict:
     nh_cols = [c for c in cols if not c.startswith("hist_")]
     fit_names = train_names + ["val"]
     # One train+validation matrix; the training rows are a positional slice of it (no extra copy)
-    X_all = pd.concat([aligned.pop(n) for n in fit_names], keys=fit_names).astype("float32")
-    y_all = pd.concat([periods[n]["labels"] for n in fit_names], keys=fit_names)
+    # Training never uses the account IDs, so drop them (19M+ strings on HI-Medium = several GB)
+    X_all = pd.concat([aligned.pop(n) for n in fit_names], ignore_index=True).astype("float32")
+    y_all = pd.concat([periods[n]["labels"] for n in fit_names], ignore_index=True)
     n_tr = int(sum(len(periods[n]["labels"]) for n in train_names))
     X_tr, y_tr = X_all.iloc[:n_tr], y_all.iloc[:n_tr]
     X_val, y_val = X_all.iloc[n_tr:], y_all.iloc[n_tr:]
@@ -213,47 +293,85 @@ def main(cfg_path: Path, nrows: int | None, reuse_search: bool = False) -> dict:
         trials.to_csv(trials_path, index=False)
     gc.collect()
     # The search caps rounds; re-find the best count for the chosen settings with a higher cap
-    best_iter, val_score = models.find_rounds(X_tr, y_tr, X_val, y_val, best, mcfg["search"]["max_rounds"],
-                                              mcfg["xgboost"]["early_stopping_rounds"], seed)
+    rounds_path = reports / "xgb_rounds.json"
+    rounds_key = {"params": best, "max_rounds": mcfg["search"]["max_rounds"], "n_cols": len(cols),
+                  "n_train": int(len(X_tr))}
+    prev_rounds = json.loads(rounds_path.read_text()) if rounds_path.exists() else {}
+    if reuse_search and prev_rounds.get("key") == json.loads(json.dumps(rounds_key, default=str)):
+        best_iter, val_score = prev_rounds["best_iter"], prev_rounds["val_pr_auc"]
+        log("reusing earlier round search", t0)
+    else:
+        best_iter, val_score = models.find_rounds(X_tr, y_tr, X_val, y_val, best, mcfg["search"]["max_rounds"],
+                                                  mcfg["xgboost"]["early_stopping_rounds"], seed)
+        rounds_path.write_text(json.dumps({"key": rounds_key, "best_iter": best_iter, "val_pr_auc": val_score},
+                                          default=str, indent=1))
+    if best_iter >= mcfg["search"]["max_rounds"] - mcfg["xgboost"]["early_stopping_rounds"]:
+        log(f"NOTE: best iteration {best_iter} is at the cap; raise models.search.max_rounds for a better model",
+            t0)
     log(f"rounds re-found with cap {mcfg['search']['max_rounds']}: best iteration {best_iter}, "
         f"val PR-AUC {val_score:.4f}", t0)
     gc.collect()
     n_final = int(max(50, best_iter) * mcfg["search"]["refit_round_factor"]) + 1
     log(f"best params {best}, best iteration {best_iter}", t0)
 
+    stages = Stages(reports / "stages", {"params": best, "n_final": n_final, "best_iter": best_iter,
+                                         "cols": cols, "windows": names, "seed": seed}, reuse_search)
+
     # 5. Temporal stability: train-only model scored on validation and on test
-    m_train_only = models.fit_final(X_tr, y_tr, best, max(50, best_iter) + 1, seed)
-    stability = {}
-    for split, X, y in [("val", X_val, y_val), ("test", X_te, y_te)]:
-        s = m_train_only.predict_proba(X)[:, 1]
-        stability[split] = evaluate.summarize(split, y.to_numpy(), s, budget, target)
-
-    del m_train_only
-    gc.collect()
-
-    # 6. Final models refit on train + validation (each scored, then freed)
-    scores = {}
-    final = models.fit_final(X_all, y_all, best, n_final, seed)
-    scores[FULL] = final.predict_proba(X_te)[:, 1]
-    gc.collect()
-    m = models.fit_final(X_all[ng_cols], y_all, best, n_final, seed)
-    scores[NO_GRAPH] = m.predict_proba(X_te[ng_cols])[:, 1]
-    del m
-    gc.collect()
-    if len(nh_cols) < len(cols):
-        m = models.fit_final(X_all[nh_cols], y_all, best, n_final, seed)
-        scores[NO_HIST] = m.predict_proba(X_te[nh_cols])[:, 1]
+    def _train_only():
+        m = models.fit_final(X_tr, y_tr, best, max(50, best_iter) + 1, seed)
+        out = np.concatenate([m.predict_proba(X_val)[:, 1], m.predict_proba(X_te)[:, 1]])
         del m
         gc.collect()
-    # Isolation Forest is unsupervised and cannot use NaN history columns
-    m = models.train_isolation_forest(X_tr[nh_cols], mcfg["isolation_forest"], seed)
-    scores[IFOREST] = models.isolation_scores(m, X_te[nh_cols])
-    del m
+        return out
+
+    to = stages.get("train_only", _train_only, t0)
+    stability = {
+        "val": evaluate.summarize("val", y_val.to_numpy(), to[:len(y_val)], budget, target),
+        "test": evaluate.summarize("test", yt, to[len(y_val):], budget, target),
+    }
+
+    # 6. Final models refit on train + validation (each scored, checkpointed, then freed)
+    final_path = reports / "stages" / "final_model.json"
+
+    def _full():
+        m = models.fit_final(X_all, y_all, best, n_final, seed)
+        m.save_model(final_path)
+        return m.predict_proba(X_te)[:, 1]
+
+    def _refit(cols_subset, s=seed):
+        def run():
+            m = models.fit_final(X_all[cols_subset], y_all, best, n_final, s)
+            out = m.predict_proba(X_te[cols_subset])[:, 1]
+            del m
+            gc.collect()
+            return out
+        return run
+
+    scores = {FULL: stages.get("full", _full, t0)}
+    final = models.load_model(final_path)
+    gc.collect()
+    scores[NO_GRAPH] = stages.get("no_graph", _refit(ng_cols), t0)
+    if len(nh_cols) < len(cols):
+        scores[NO_HIST] = stages.get("no_hist", _refit(nh_cols), t0)
+
+    def _iforest():
+        # Isolation Forest is unsupervised and cannot use NaN history columns. It is fitted on a row
+        # sample: each tree only ever draws 256 rows, so a 500K-row pool is statistically equivalent
+        # and avoids a full-size copy of the training matrix (the main out-of-memory risk at scale).
+        m = models.train_isolation_forest(X_tr, mcfg["isolation_forest"], seed, cols=nh_cols)
+        return models.isolation_scores(m, X_te[nh_cols])
+
+    scores[IFOREST] = stages.get("iforest", _iforest, t0)
     gc.collect()
     scores[RULES] = models.rule_baseline_score(periods["test"]["scenarios"], chosen)
     log("final models trained", t0)
     # Saved so later experiments (GNN) are compared on exactly the same accounts and scores
-    pd.DataFrame({"label": yt, **scores}, index=y_te.index).to_parquet(reports / "test_scores.parquet")
+    ts_path = reports / "test_scores.parquet"
+    ts = pd.DataFrame({"label": yt, **scores}, index=y_te.index)
+    # Rewrite only on change, so a resumed run doesn't make up-to-date GNN results look stale
+    if not (ts_path.exists() and pd.read_parquet(ts_path).equals(ts)):
+        ts.to_parquet(ts_path)
     (reports / "feature_columns.json").write_text(json.dumps(
         {"all": cols, "no_network": ng_cols, "windows": names, "cache": str(cache)}, indent=1))
     table = evaluate.comparison_table([evaluate.summarize(n, yt, s, budget, target) for n, s in scores.items()])
@@ -263,10 +381,8 @@ def main(cfg_path: Path, nrows: int | None, reuse_search: bool = False) -> dict:
     # 7. Durability evidence
     seed_pr = [average_precision_score(yt, scores[FULL])]
     for s in mcfg["stability_seeds"]:
-        m = models.fit_final(X_all, y_all, best, n_final, s)
-        seed_pr.append(average_precision_score(yt, m.predict_proba(X_te)[:, 1]))
-        del m
-        gc.collect()
+        sc = stages.get(f"seed_{s}", _refit(cols, s), t0)
+        seed_pr.append(average_precision_score(yt, sc))
     ci, diffs = robustness.bootstrap(yt, scores, budget, mcfg["bootstrap_reps"], seed,
                                      pairs=[(FULL, RULES), (FULL, NO_GRAPH)]
                                      + ([(FULL, NO_HIST)] if NO_HIST in scores else []))

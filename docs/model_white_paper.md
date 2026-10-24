@@ -22,6 +22,8 @@ On a held-out test period of 356,393 accounts, with investigators reviewing 1% o
 
 The model finds about 5x as many laundering accounts as the rules for the same investigator workload. The gap is statistically significant (paired bootstrap, 200 resamples). Results come from synthetic data and must be revalidated on production data before any use (Section 6).
 
+**Scale-up (Section 8).** Rerun on 31.9M transactions (IBM HI-Medium), the same design held. Network features added about 10 recall points, and a graph neural network (GraphSAGE) added a further 0.7 points over XGBoost (significant), though not on the validation window. XGBoost stays the primary model for explainability; a GNN-XGBoost ensemble is kept as a challenger.
+
 ## 1. Purpose and intended use
 
 - **Business problem.** Identify accounts whose transaction behaviour indicates possible money laundering, so investigators can prioritise reviews.
@@ -106,7 +108,7 @@ Each scenario produces a score per account; an alert fires when the score reache
 | `self_transfer` feature | Severe drift between train and test (PSI 1.38). Removing it moved test PR-AUC from 0.632 to 0.630. | Removed: drift risk with no benefit. |
 | Prior-case history features (exposure to accounts confirmed in a window at least 2 windows earlier) | PR-AUC 0.623 with them vs 0.630 without (significant). Recall difference not significant. | Rejected. Only one training window had history, so the model overfit it. Worth retesting with a longer history. |
 | Boosting rounds cap raised from 600 to 2,000 | Best count about 600-700; no change in test performance | No change. |
-| Graph neural network | Planned on the larger HI-Medium dataset | Pending; see Section 8. |
+| Graph neural network (GraphSAGE) | On HI-Medium: +0.7 recall points over XGBoost on test (significant), no lead on validation | Not adopted as primary; ensemble kept as a challenger. See Section 8. |
 
 ## 4. Threshold setting
 
@@ -206,10 +208,68 @@ These match recognised typologies: currency layering, a channel with concentrate
 
 At validation, the largest feature drift was moderate: maximum received amount (PSI 0.18) and hourly or daily bursts (0.11-0.14). Everything else was stable. `reports/feature_drift_psi.csv` is the baseline for future monitoring.
 
-## 8. Planned work
-- **Graph neural network.** GraphSAGE on the account graph, tested on IBM's larger HI-Medium dataset (about 32M transactions). It will be compared with this model on the same windows and metrics, with a paired bootstrap. It will be adopted only if it is significantly better.
-- **Prior-case features** retested on the longer HI-Medium history.
-- **Duration-normalised and overlapping windows** (Section 6).
+## 8. Scale-up and graph neural network benchmark (HI-Medium)
+
+### 8.1 Setup
+The same pipeline was rerun on IBM's larger HI-Medium dataset on a cloud GPU (RunPod, RTX 3090), with every stage checkpointed so it can resume after interruption.
+
+| Property | Value |
+|---|---|
+| Transactions | 31,898,238 (1-28 September 2022) |
+| Windows | 30 equal-count windows (~1.06M transactions each): 28 training, 1 validation, 1 test |
+| Training rows | 19.0M account-windows (48,668 positive) |
+| Test window | 738,260 accounts, 5,867 laundering (0.79%) |
+| XGBoost | Same 10-trial search; selected settings: depth 8, learning rate 0.03, minimum child weight 20, L2 penalty 20, no up-weighting; 2,540 rounds found on validation (cap 4,000), 2,922 in the refit |
+| GNN | Directional GraphSAGE (plain PyTorch): 2 layers, 128 hidden units, separate weights for incoming and outgoing neighbours, raw features also fed to the output head. Full-batch training, one window graph per step. Early stopping on validation PR-AUC (best epoch 66), then refit on training + validation windows with 2 seeds. |
+| Ensemble | 50/50 average of GNN and XGBoost score ranks; weight fixed in advance, not tuned on test |
+
+### 8.2 Results on the test window (1% alert budget = 7,383 alerts)
+
+| Model | PR-AUC | Recall at budget | Precision at budget |
+|---|---|---|---|
+| **Ensemble (GNN + XGBoost)** | **0.915** | **88.4%** | **70.3%** |
+| GraphSAGE GNN | 0.912 | 88.2% | 70.1% |
+| XGBoost with network features | 0.905 | 87.4% | 69.4% |
+| XGBoost without network features | 0.804 | 77.5% | 61.6% |
+| Isolation Forest (unsupervised) | 0.133 | 24.2% | 19.2% |
+| Rules only, tuned | 0.070 | 16.3% | 13.0% |
+
+Paired bootstrap differences (200 resamples, same accounts):
+
+| Comparison | Recall at budget | 95% CI | PR-AUC | 95% CI |
+|---|---|---|---|---|
+| Network features (XGBoost with vs without) | +9.9 pts | +9.0 to +10.7 | +0.101 | +0.095 to +0.107 |
+| GNN vs XGBoost | +0.7 pts | +0.3 to +1.3 | +0.007 | +0.005 to +0.011 |
+| Ensemble vs XGBoost | +1.0 pt | +0.5 to +1.4 | +0.010 | +0.008 to +0.011 |
+
+Seed stability: XGBoost PR-AUC standard deviation 0.0003 (3 seeds); GNN 0.0002 (2 seeds). Feature drift between training and test was stable for every top-20 feature (maximum PSI 0.05).
+
+### 8.3 Why the test scores are much higher than validation, and what that means
+The train-only XGBoost model scored PR-AUC 0.610 on the validation window and 0.904 on the test window. This is not leakage. Features use only each window's own transactions, and the test window was never used for training or tuning. The test window is structurally easier:
+
+| | Validation window | Test window |
+|---|---|---|
+| Time span | ~8.5 hours | 12 days (transaction volume falls at the end of the simulation) |
+| Laundering accounts | 0.24% | 0.79% |
+| Highest possible precision at a 1% budget | 24% | 79% |
+| Achieved precision (share of the maximum) | 18% (75%) | 69% (87%) |
+| Recall at budget | 75.4% | 87.4% |
+| ROC-AUC (independent of base rate) | 0.988 | 0.996 |
+
+PR-AUC and precision rise with the base rate, and a 12-day window gives each account far more transactions as evidence. **Absolute test-window scores therefore overstate performance on a typical period.** Comparisons between models on the same test accounts (Section 8.2) are unaffected and are the basis for the conclusions below. Validation-window figures are the better guide to absolute performance.
+
+### 8.4 Conclusions
+- **Network features are the largest single gain.** They add about 10 recall points at scale, confirming the HI-Small finding (+8 points).
+- **The GNN is competitive but its edge is small.** On the test window it beats XGBoost by 0.7 recall points (about 44 more laundering accounts per 7,383 alerts), which is significant. On the validation window it did not lead: its best validation PR-AUC was 0.600, against 0.610 for XGBoost. The advantage is not yet shown to hold across periods.
+- **The ensemble is best on test** (+1.0 point), but it inherits the GNN's weaker explainability.
+- **Decision.** Keep XGBoost as the primary model: it is as accurate within about 1 point and easier to explain and validate. Treat the ensemble as a challenger, and test it with rolling multi-window evaluation before any promotion.
+- **Rules at scale.** The rapid-movement threshold chosen on validation ($1,000) is the lowest value in the grid, so below-the-line testing was not possible. The grid should be extended downward before the next tuning cycle. The structuring and fan thresholds show clear below-the-line separation (21.1% vs 1.7%, and 10.8% vs 4.0%).
+
+### 8.5 Remaining planned work
+- Rolling evaluation over several test windows, so performance is not judged on one (unusually long) period.
+- Extend the rapid-movement threshold grid below $1,000.
+- Retest prior-case features on HI-Medium's longer history.
+- Duration-normalised or overlapping windows (Section 6).
 
 ## 9. Governance and reproducibility
 - **Reproducible.** Fixed random seeds, version-pinned requirements, and every threshold, grid and parameter in `config.yaml`. One command, `python scripts/run_pipeline.py`, regenerates every number in this paper.

@@ -28,10 +28,38 @@ def transform_features(X: pd.DataFrame) -> np.ndarray:
     return np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)
 
 
+class RunningScaler:
+    """Mean and SD accumulated one window at a time (float64), so all training windows
+    never need to sit in memory together."""
+
+    def __init__(self):
+        self.n, self.s, self.ss = 0, None, None
+
+    def update(self, a: np.ndarray) -> None:
+        a = a.astype(np.float64)
+        self.s = a.sum(axis=0) if self.s is None else self.s + a.sum(axis=0)
+        self.ss = (a * a).sum(axis=0) if self.ss is None else self.ss + (a * a).sum(axis=0)
+        self.n += len(a)
+
+    def result(self) -> tuple[np.ndarray, np.ndarray]:
+        mean = self.s / self.n
+        std = np.sqrt(np.maximum(self.ss / self.n - mean ** 2, 0.0))
+        return mean.astype(np.float32), np.where(std > 1e-6, std, 1.0).astype(np.float32)
+
+
 def fit_scaler(arrays: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-    stacked = np.concatenate(arrays)
-    mean, std = stacked.mean(axis=0), stacked.std(axis=0)
-    return mean.astype(np.float32), np.where(std > 1e-6, std, 1.0).astype(np.float32)
+    sc = RunningScaler()
+    for a in arrays:
+        sc.update(a)
+    return sc.result()
+
+
+def to_device(g: dict, device) -> dict:
+    """Move one window's tensors to `device`. Graphs live in system RAM and are moved one at a
+    time, so GPU memory holds a single window however many windows there are."""
+    if g["x"].device == torch.device(device):
+        return g
+    return {k: (v.to(device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in g.items()}
 
 
 def _row_norm(rows: np.ndarray, cols: np.ndarray, n: int, device) -> torch.Tensor:
@@ -103,11 +131,12 @@ def pos_weight(graphs: list[dict], mode: str) -> float:
 
 
 @torch.no_grad()
-def predict(model: DirSAGE, g: dict) -> np.ndarray:
+def predict(model: DirSAGE, g: dict, device=None) -> np.ndarray:
     """Raw logits. Ranking metrics only need the order, and a float32 sigmoid saturates
     to exactly 0 for very low-risk accounts, which creates ties that distort the metrics."""
     model.eval()
-    return model(g).double().cpu().numpy()
+    dev = device or next(model.parameters()).device
+    return model(to_device(g, dev)).double().cpu().numpy()
 
 
 def train(train_graphs: list[dict], cfg: dict, seed: int, val_graph: dict | None = None,
@@ -121,7 +150,7 @@ def train(train_graphs: list[dict], cfg: dict, seed: int, val_graph: dict | None
 
     torch.manual_seed(seed)
     np.random.seed(seed)
-    device = train_graphs[0]["x"].device
+    device = torch.device(cfg.get("device", "cpu"))
     model = DirSAGE(train_graphs[0]["x"].shape[1], cfg["hidden"], cfg["layers"], cfg["dropout"]).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight(train_graphs, cfg["pos_weight_mode"]),
@@ -133,7 +162,7 @@ def train(train_graphs: list[dict], cfg: dict, seed: int, val_graph: dict | None
         model.train()
         total = 0.0
         for i in rng.permutation(len(train_graphs)):
-            g = train_graphs[i]
+            g = to_device(train_graphs[i], device)
             opt.zero_grad()
             loss = loss_fn(model(g), g["y"])
             loss.backward()
@@ -142,7 +171,7 @@ def train(train_graphs: list[dict], cfg: dict, seed: int, val_graph: dict | None
             total += loss.item()
         row = {"epoch": epoch, "train_loss": total / len(train_graphs)}
         if val_graph is not None:
-            score = float(average_precision_score(val_graph["y"].cpu().numpy(), predict(model, val_graph)))
+            score = float(average_precision_score(val_graph["y"].cpu().numpy(), predict(model, val_graph, device)))
             row["val_pr_auc"] = score
             if score > best_score:
                 best_score, best_epoch, since_best = score, epoch, 0

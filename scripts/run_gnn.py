@@ -81,7 +81,14 @@ def main(cfg_path: Path, device_arg: str) -> dict:
     t0 = time.time()
 
     def log(msg):
-        print(f"[{time.time() - t0:7.1f}s] {msg}", flush=True)
+        try:
+            import resource
+            mem = f" | peak RAM {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.1f} GB"
+        except ImportError:
+            mem = ""
+        if torch.cuda.is_available():
+            mem += f", peak GPU {torch.cuda.max_memory_allocated() / 1e9:.1f} GB"
+        print(f"[{time.time() - t0:7.1f}s] {msg}{mem}", flush=True)
 
     cfg = yaml.safe_load(cfg_path.read_text())
     gcfg = cfg["gnn"]
@@ -100,18 +107,27 @@ def main(cfg_path: Path, device_arg: str) -> dict:
                           else ("cpu" if device_arg == "auto" else device_arg))
     log(f"device: {device}; windows: {names}; features: {len(cols)}")
 
-    raw = {}
-    for n in names:
+    gcfg = {**gcfg, "device": str(device)}
+
+    def load(n):
         X = pd.read_parquet(cache / f"{n}_X.parquet").reindex(columns=cols, fill_value=0.0)
         y = pd.read_parquet(cache / f"{n}_labels.parquet")["label"]
-        edges = pd.read_parquet(cache / f"{n}_edges.parquet")
-        raw[n] = (X, y, edges)
+        return X, y
+
     train_names = [n for n in names if n.startswith("train_")]
-    mean, std = gnn.fit_scaler([gnn.transform_features(raw[n][0]) for n in train_names])
-    graphs = {n: gnn.build_graph(*raw[n][:2], raw[n][2], mean, std, device) for n in names}
-    del raw
-    log("graphs built: " + ", ".join(f"{n} {len(graphs[n]['index']):,} nodes, "
-                                     f"{graphs[n]['A_out']._nnz():,} edges" for n in names))
+    # Pass 1: input scaling from training windows, one window at a time
+    scaler = gnn.RunningScaler()
+    for n in train_names:
+        scaler.update(gnn.transform_features(load(n)[0]))
+    mean, std = scaler.result()
+    # Pass 2: one graph per window, kept in system RAM (moved to the GPU one window per step)
+    graphs = {}
+    for n in names:
+        X, y = load(n)
+        graphs[n] = gnn.build_graph(X, y, pd.read_parquet(cache / f"{n}_edges.parquet"), mean, std, "cpu")
+        del X, y
+    log(f"graphs built: {len(graphs)} windows, {sum(len(g['index']) for g in graphs.values()):,} account-windows, "
+        f"{sum(g['A_out']._nnz() for g in graphs.values()):,} edges")
 
     # 1. Early stopping on validation to choose the number of epochs
     tr = [graphs[n] for n in train_names]
@@ -126,7 +142,7 @@ def main(cfg_path: Path, device_arg: str) -> dict:
     seed_scores = []
     for s in gcfg["seeds"]:
         model, _, _ = gnn.train(fit, gcfg, s, epochs=best_epoch, log=log)
-        seed_scores.append(gnn.predict(model, test))
+        seed_scores.append(gnn.predict(model, test, device))
         log(f"seed {s}: test PR-AUC {average_precision_score(yt, seed_scores[-1]):.4f}")
         del model
         if device.type == "cuda":

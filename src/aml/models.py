@@ -101,11 +101,28 @@ def fit_final(X, y, params: dict, n_estimators: int, seed: int = 42) -> XGBClass
     return model
 
 
-def train_isolation_forest(X_train: pd.DataFrame, params: dict, random_state: int = 42) -> IsolationForest:
-    """Unsupervised: never sees labels. Useful where labelled cases are scarce."""
+def train_isolation_forest(X_train: pd.DataFrame, params: dict, random_state: int = 42,
+                           cols: list[str] | None = None, max_rows: int = 500_000) -> IsolationForest:
+    """Unsupervised: never sees labels. Useful where labelled cases are scarce.
+
+    Rows are sampled BEFORE columns are selected and transformed, so memory stays small
+    however large the training matrix is. Each tree draws only `max_samples` (default 256)
+    rows anyway, so fitting on a 500K-row pool gives an equivalent model.
+    """
+    if len(X_train) > max_rows:
+        idx = np.random.default_rng(random_state).choice(len(X_train), max_rows, replace=False)
+        X_train = X_train.iloc[np.sort(idx)]
+    if cols is not None:
+        X_train = X_train[cols]
     model = IsolationForest(**params, random_state=random_state, n_jobs=-1)
     model.fit(np.log1p(X_train.clip(lower=0)))
     return model
+
+
+def load_model(path) -> XGBClassifier:
+    m = XGBClassifier()
+    m.load_model(path)
+    return m
 
 
 def isolation_scores(model: IsolationForest, X: pd.DataFrame) -> np.ndarray:
