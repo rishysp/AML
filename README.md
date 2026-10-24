@@ -103,15 +103,3 @@ Locally: `pip install torch`, then `python scripts/run_gnn.py` after `run_pipeli
 \*The HI-Medium test window is unusually long (12 days) with 3x the laundering base rate of validation, so its absolute scores run high. Compare models within it, not against HI-Small.
 
 Details: `reports/experiments/v3_case_history/`. The history code stays in `src/aml/history.py`, switched off in `config.yaml`. Negative results are part of the model record and belong in the white paper.
-
-## 7-day plan
-
-| Day | Work |
-|---|---|
-| 1 | Set up the environment, pass the tests, download data, run the EDA notebook |
-| 2 | Quick run with `--nrows 500000`; sanity-check scenario scores and sweeps |
-| 3 | Full run; adjust threshold grids in `config.yaml` if the sweeps are flat |
-| 4 | Review model comparison and feature importance; try one improvement |
-| 5 | Write the white paper |
-| 6 | README results section, charts, clean up the repo, push to GitHub |
-| 7 | Copy bullets into the resume; prepare a 2-minute walkthrough for interviews |
