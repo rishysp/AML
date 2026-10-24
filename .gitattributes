@@ -1,2 +1,3 @@
-# Auto detect text files and perform LF normalization
 * text=auto
+# Shell scripts run on Linux (RunPod): always check them out with LF line endings
+*.sh text eol=lf

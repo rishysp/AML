@@ -71,6 +71,10 @@ tests/                    synthetic-data tests
 - **Workload-based metrics:** results are reported as recall at a fixed alert budget, and alerts needed to reach a target recall. Accuracy is meaningless at a laundering rate near 0.1%.
 - **Explainable features:** every feature maps to a behaviour an investigator would recognise.
 
+## Running on a cloud GPU (RunPod)
+
+`RUNPOD.md` is the step-by-step guide: choosing a pod, starting it, running everything with `bash runpod/start.sh`, downloading results and terminating the pod. The scripts in `runpod/` work on any Linux GPU machine.
+
 ## GNN experiment on Kaggle (larger data, GPU)
 
 `scripts/run_gnn.py` trains a directional GraphSAGE network (plain PyTorch) on the same time windows as the pipeline. It compares the GNN, XGBoost and a 50/50 rank ensemble on the same test accounts, with a paired bootstrap. Its resume draft (`gnn/resume_bullets_gnn.md`) claims a GNN gain only if the gain is significant.
@@ -82,6 +86,8 @@ Run it on Kaggle with `kaggle/aml_gnn_kaggle.ipynb`:
 4. Accelerator: GPU T4 x2 or P100. Do a first run with `DATASET = "HI-Small"` (about 30-40 min), then `"HI-Medium"` (about 31M transactions, 2-3 hours) via *Save & Run All*.
 5. Download `aml_results_<dataset>.zip` from the Output panel.
 
+If a run stops (e.g. killed for memory), rerun the same cell: window features, the hyperparameter search, the round search and every finished model stage are checkpointed in `/kaggle/working` and reused within the same session. Each progress line shows peak RAM, so the step that failed is visible. If memory is still short, set `MAX_TRAIN_WINDOWS` (e.g. 15) to train on the most recent windows only.
+
 Locally: `pip install torch`, then `python scripts/run_gnn.py` after `run_pipeline.py`. This is slow on a CPU for the full data.
 
 ## Experiments that did not help
@@ -92,3 +98,20 @@ Locally: `pip install torch`, then `python scripts/run_gnn.py` after `run_pipeli
 | v2 | Equal windows, new features, tuning, drift fix | **0.63** | Kept |
 | v3 | Prior-case history features (2-window label lag) | 0.62 | Dropped: significantly worse PR-AUC; only one training window had history, so the model overfit it |
 | v3 | Boosting-round cap 600 to 2000 | 0.63 | No change; the best count was about 600-700 |
+| HI-Medium | Same pipeline on 31.9M transactions + GraphSAGE GNN (RunPod GPU) | 0.90 XGBoost, 0.91 GNN, 0.92 ensemble* | Network features +10 recall pts; GNN +0.7 pts over XGBoost (significant on test, not ahead on validation). XGBoost kept as primary. Results in `reports/hi_medium/`; see white paper Section 8 |
+
+\*The HI-Medium test window is unusually long (12 days) with 3x the laundering base rate of validation, so its absolute scores run high. Compare models within it, not against HI-Small.
+
+Details: `reports/experiments/v3_case_history/`. The history code stays in `src/aml/history.py`, switched off in `config.yaml`. Negative results are part of the model record and belong in the white paper.
+
+## 7-day plan
+
+| Day | Work |
+|---|---|
+| 1 | Set up the environment, pass the tests, download data, run the EDA notebook |
+| 2 | Quick run with `--nrows 500000`; sanity-check scenario scores and sweeps |
+| 3 | Full run; adjust threshold grids in `config.yaml` if the sweeps are flat |
+| 4 | Review model comparison and feature importance; try one improvement |
+| 5 | Write the white paper |
+| 6 | README results section, charts, clean up the repo, push to GitHub |
+| 7 | Copy bullets into the resume; prepare a 2-minute walkthrough for interviews |

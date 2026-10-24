@@ -16,6 +16,12 @@ split:
   # account-period is on the same scale. Last window = test, second-last = validation,
   # all earlier windows = training samples. Chronological; never shuffled.
   n_windows: 5
+  # Optional cap: train on only the N most recent training windows (null = all). A safety valve
+  # for memory and run time on large datasets; it does not change the validation or test windows.
+  max_train_windows: null
+  # Worker processes for building window features in parallel (Linux). Each needs a few GB of RAM
+  # on HI-Medium-sized windows; 1 = sequential.
+  workers: 1
 
 scenarios:
   structuring:
