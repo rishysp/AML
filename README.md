@@ -108,4 +108,6 @@ tests/                       unit and end-to-end tests on synthetic data
 | v3 | Boosting-round cap 600 to 2,000 | 0.63 | No change; the best count was about 600-700 |
 | HI-Medium | Same pipeline on 31.9M transactions + GraphSAGE GNN | 0.90 XGBoost, 0.91 GNN, 0.92 ensemble* | Network features +10 recall pts; GNN +0.7 pts (significant on test, not ahead on validation). XGBoost kept as primary |
 
-\*Long, high-base-rate test window: compare within the row, not across datasets. Rejected experiments are kept on record: `reports/experiments/v3_case_history/` and white paper Section 3.4.
+\*The HI-Medium test window is unusually long (12 days) with 3x the laundering base rate of validation, so its absolute scores run high. Compare models within it, not against HI-Small.
+
+Details: `reports/experiments/v3_case_history/`. The history code stays in `src/aml/history.py`, switched off in `config.yaml`. Negative results are part of the model record and belong in the white paper.
