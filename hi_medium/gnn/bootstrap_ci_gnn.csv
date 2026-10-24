@@ -1,0 +1,10 @@
+model,metric,ci_low,ci_high
+GraphSAGE GNN,pr_auc,0.9067773183625822,0.9177319610434623
+GraphSAGE GNN,recall_at_budget,0.8745869398117065,0.8898583054542542
+GraphSAGE GNN,precision_at_budget,0.6839868426322937,0.718549370765686
+Ensemble (GNN + XGBoost),pr_auc,0.9090986490592297,0.9200570729768048
+Ensemble (GNN + XGBoost),recall_at_budget,0.8766242861747742,0.891796886920929
+Ensemble (GNN + XGBoost),precision_at_budget,0.6841291189193726,0.7192638516426086
+XGBoost + network features,pr_auc,0.8987769502429,0.9105990161296451
+XGBoost + network features,recall_at_budget,0.8665854930877686,0.8816031217575073
+XGBoost + network features,precision_at_budget,0.6765508651733398,0.712210476398468

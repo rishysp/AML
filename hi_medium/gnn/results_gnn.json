@@ -1,0 +1,166 @@
+{
+  "data": {
+    "dataset": "HI-Medium",
+    "transactions": 31898238,
+    "accounts_test": 738260,
+    "laundering_accounts_test": 5867
+  },
+  "gnn_config": {
+    "dropout": 0.2,
+    "ensemble_weight": 0.5,
+    "hidden": 128,
+    "layers": 2,
+    "lr": 0.003,
+    "max_epochs": 150,
+    "patience": 15,
+    "pos_weight_mode": "sqrt",
+    "seeds": [
+      42,
+      7
+    ],
+    "weight_decay": 1e-05,
+    "device": "cuda"
+  },
+  "best_epoch": 66,
+  "device": "cuda",
+  "models": {
+    "Ensemble (GNN + XGBoost)": {
+      "pr_auc": 0.9145762994,
+      "roc_auc": 0.9967717744,
+      "precision_at_budget": 0.702559935,
+      "recall_at_budget": 0.8840974945,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 4795
+    },
+    "GraphSAGE GNN": {
+      "pr_auc": 0.912184456,
+      "roc_auc": 0.9968342839,
+      "precision_at_budget": 0.7005282406,
+      "recall_at_budget": 0.8815408215,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 4863
+    },
+    "XGBoost + network features": {
+      "pr_auc": 0.9047886646,
+      "roc_auc": 0.9960766167,
+      "precision_at_budget": 0.6944331573,
+      "recall_at_budget": 0.8738708028,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 4926
+    },
+    "XGBoost, no network features": {
+      "pr_auc": 0.8035056894,
+      "roc_auc": 0.9897164378,
+      "precision_at_budget": 0.6158743058,
+      "recall_at_budget": 0.7750127834,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 8606
+    },
+    "Rules only (tuned thresholds)": {
+      "pr_auc": 0.0703269337,
+      "roc_auc": 0.7382216789,
+      "precision_at_budget": 0.1296221048,
+      "recall_at_budget": 0.1631157321,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 515634
+    }
+  },
+  "paired_differences": [
+    {
+      "comparison": "GraphSAGE GNN minus XGBoost + network features",
+      "metric": "pr_auc",
+      "mean_diff": 0.0074380314,
+      "ci_low": 0.0046346619,
+      "ci_high": 0.0106513305,
+      "significant": true
+    },
+    {
+      "comparison": "GraphSAGE GNN minus XGBoost + network features",
+      "metric": "recall_at_budget",
+      "mean_diff": 0.0074733794,
+      "ci_low": 0.0030543446,
+      "ci_high": 0.0131505597,
+      "significant": true
+    },
+    {
+      "comparison": "Ensemble (GNN + XGBoost) minus XGBoost + network features",
+      "metric": "pr_auc",
+      "mean_diff": 0.009786827,
+      "ci_low": 0.0084636626,
+      "ci_high": 0.0112542029,
+      "significant": true
+    },
+    {
+      "comparison": "Ensemble (GNN + XGBoost) minus XGBoost + network features",
+      "metric": "recall_at_budget",
+      "mean_diff": 0.0095706116,
+      "ci_low": 0.0054669469,
+      "ci_high": 0.0136494441,
+      "significant": true
+    }
+  ],
+  "confidence_intervals": [
+    {
+      "model": "GraphSAGE GNN",
+      "metric": "pr_auc",
+      "ci_low": 0.9067773184,
+      "ci_high": 0.917731961
+    },
+    {
+      "model": "GraphSAGE GNN",
+      "metric": "recall_at_budget",
+      "ci_low": 0.8745869398,
+      "ci_high": 0.8898583055
+    },
+    {
+      "model": "GraphSAGE GNN",
+      "metric": "precision_at_budget",
+      "ci_low": 0.6839868426,
+      "ci_high": 0.7185493708
+    },
+    {
+      "model": "Ensemble (GNN + XGBoost)",
+      "metric": "pr_auc",
+      "ci_low": 0.9090986491,
+      "ci_high": 0.920057073
+    },
+    {
+      "model": "Ensemble (GNN + XGBoost)",
+      "metric": "recall_at_budget",
+      "ci_low": 0.8766242862,
+      "ci_high": 0.8917968869
+    },
+    {
+      "model": "Ensemble (GNN + XGBoost)",
+      "metric": "precision_at_budget",
+      "ci_low": 0.6841291189,
+      "ci_high": 0.7192638516
+    },
+    {
+      "model": "XGBoost + network features",
+      "metric": "pr_auc",
+      "ci_low": 0.8987769502,
+      "ci_high": 0.9105990161
+    },
+    {
+      "model": "XGBoost + network features",
+      "metric": "recall_at_budget",
+      "ci_low": 0.8665854931,
+      "ci_high": 0.8816031218
+    },
+    {
+      "model": "XGBoost + network features",
+      "metric": "precision_at_budget",
+      "ci_low": 0.6765508652,
+      "ci_high": 0.7122104764
+    }
+  ],
+  "gnn_seed_pr_auc": {
+    "values": [
+      0.9121844559796385,
+      0.9116942938377416
+    ],
+    "mean": 0.91193937490869,
+    "std": 0.00024508107094844966
+  }
+}

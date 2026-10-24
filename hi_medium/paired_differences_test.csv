@@ -1,0 +1,5 @@
+comparison,metric,mean_diff,ci_low,ci_high,significant
+XGBoost + network features minus Rules only (tuned thresholds),pr_auc,0.8346125596264886,0.8263655947282563,0.8417294645242828,True
+XGBoost + network features minus Rules only (tuned thresholds),recall_at_budget,0.7085308075989505,0.6967423694632577,0.7187979148114997,True
+"XGBoost + network features minus XGBoost, no network features",pr_auc,0.10148585129066424,0.0953435193605266,0.10721171916732151,True
+"XGBoost + network features minus XGBoost, no network features",recall_at_budget,0.09884694286885921,0.09006813153530109,0.10678980496092609,True

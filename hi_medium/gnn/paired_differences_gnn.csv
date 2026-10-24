@@ -1,0 +1,5 @@
+comparison,metric,mean_diff,ci_low,ci_high,significant
+GraphSAGE GNN minus XGBoost + network features,pr_auc,0.007438031428399966,0.0046346619056965325,0.010651330457656013,True
+GraphSAGE GNN minus XGBoost + network features,recall_at_budget,0.007473379373550415,0.0030543445609509945,0.013150559738278389,True
+Ensemble (GNN + XGBoost) minus XGBoost + network features,pr_auc,0.009786826989265925,0.008463662601873473,0.011254202867852631,True
+Ensemble (GNN + XGBoost) minus XGBoost + network features,recall_at_budget,0.009570611640810966,0.005466946866363287,0.013649444095790386,True

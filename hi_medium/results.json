@@ -1,0 +1,275 @@
+{
+  "version": 3,
+  "history": {
+    "enabled": false,
+    "label_lag_windows": 2
+  },
+  "data": {
+    "transactions": 31898238,
+    "laundering_txn_rate": 0.0011044497191349566,
+    "date_range": [
+      "2022-09-01 00:00:00",
+      "2022-09-28 15:58:00"
+    ],
+    "windows": 30,
+    "accounts_test": 738260,
+    "laundering_accounts_test": 5867
+  },
+  "config": {
+    "alert_budget": 0.01,
+    "target_recall": 0.8
+  },
+  "rules": {
+    "fan": {
+      "chosen_threshold": 5.0,
+      "test_alerts": 4268,
+      "test_alert_rate": 0.005781161108552543,
+      "test_precision": 0.10801312089971883,
+      "test_recall": 0.07857508096130901
+    },
+    "rapid_movement": {
+      "chosen_threshold": 1000.0,
+      "test_alerts": 5162,
+      "test_alert_rate": 0.0069921165984883375,
+      "test_precision": 0.12223944207671446,
+      "test_recall": 0.10755070734617352
+    },
+    "structuring": {
+      "chosen_threshold": 2.0,
+      "test_alerts": 659,
+      "test_alert_rate": 0.0008926394495164306,
+      "test_precision": 0.2109256449165402,
+      "test_recall": 0.023691835691153913
+    }
+  },
+  "xgb_best_params": {
+    "max_depth": 8.0,
+    "learning_rate": 0.03,
+    "min_child_weight": 20.0,
+    "subsample": 1.0,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 20.0,
+    "gamma": 0.0,
+    "pos_weight_mode": "none"
+  },
+  "xgb_rounds": 2922,
+  "models": {
+    "XGBoost + network features": {
+      "pr_auc": 0.9047886646,
+      "roc_auc": 0.9960766167,
+      "precision_at_budget": 0.6944331573,
+      "recall_at_budget": 0.8738708028,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 4926
+    },
+    "XGBoost, no network features": {
+      "pr_auc": 0.8035056894,
+      "roc_auc": 0.9897164378,
+      "precision_at_budget": 0.6158743058,
+      "recall_at_budget": 0.7750127834,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 8606
+    },
+    "Isolation Forest (unsupervised)": {
+      "pr_auc": 0.1334157421,
+      "roc_auc": 0.8854652766,
+      "precision_at_budget": 0.1919274008,
+      "recall_at_budget": 0.2415203682,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 166520
+    },
+    "Rules only (tuned thresholds)": {
+      "pr_auc": 0.0703269337,
+      "roc_auc": 0.7382216789,
+      "precision_at_budget": 0.1296221048,
+      "recall_at_budget": 0.1631157321,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 515634
+    }
+  },
+  "confidence_intervals": {
+    "XGBoost + network features": {
+      "pr_auc": [
+        0.8987769502429,
+        0.9105990161296451
+      ],
+      "recall_at_budget": [
+        0.8665855111735152,
+        0.8816031591549641
+      ],
+      "precision_at_budget": [
+        0.6765508600839767,
+        0.7122104835432751
+      ]
+    },
+    "XGBoost, no network features": {
+      "pr_auc": [
+        0.7960694924384394,
+        0.8115624869666872
+      ],
+      "recall_at_budget": [
+        0.7651591072231458,
+        0.7857589152765736
+      ],
+      "precision_at_budget": [
+        0.6013646214276039,
+        0.6302451577949343
+      ]
+    },
+    "Isolation Forest (unsupervised)": {
+      "pr_auc": [
+        0.12479438018555637,
+        0.14195583926828415
+      ],
+      "recall_at_budget": [
+        0.23298352534695546,
+        0.2514023798510977
+      ],
+      "precision_at_budget": [
+        0.18325545171339563,
+        0.1997832859271299
+      ]
+    },
+    "Rules only (tuned thresholds)": {
+      "pr_auc": [
+        0.06422182456077102,
+        0.07612991486894469
+      ],
+      "recall_at_budget": [
+        0.1575066408835081,
+        0.17550754161304047
+      ],
+      "precision_at_budget": [
+        0.12405864824597047,
+        0.13951307056752
+      ]
+    }
+  },
+  "paired_differences": [
+    {
+      "comparison": "XGBoost + network features minus Rules only (tuned thresholds)",
+      "metric": "pr_auc",
+      "mean_diff": 0.8346125596,
+      "ci_low": 0.8263655947,
+      "ci_high": 0.8417294645,
+      "significant": true
+    },
+    {
+      "comparison": "XGBoost + network features minus Rules only (tuned thresholds)",
+      "metric": "recall_at_budget",
+      "mean_diff": 0.7085308076,
+      "ci_low": 0.6967423695,
+      "ci_high": 0.7187979148,
+      "significant": true
+    },
+    {
+      "comparison": "XGBoost + network features minus XGBoost, no network features",
+      "metric": "pr_auc",
+      "mean_diff": 0.1014858513,
+      "ci_low": 0.0953435194,
+      "ci_high": 0.1072117192,
+      "significant": true
+    },
+    {
+      "comparison": "XGBoost + network features minus XGBoost, no network features",
+      "metric": "recall_at_budget",
+      "mean_diff": 0.0988469429,
+      "ci_low": 0.0900681315,
+      "ci_high": 0.106789805,
+      "significant": true
+    }
+  ],
+  "seed_stability_pr_auc": {
+    "values": [
+      0.9047886645526201,
+      0.905145025940205,
+      0.9044995626532091
+    ],
+    "mean": 0.9048110843820115,
+    "std": 0.00026398573228785655
+  },
+  "temporal_stability_train_only_model": {
+    "val": {
+      "model": "val",
+      "pr_auc": 0.6104446962266292,
+      "roc_auc": 0.9877759077667098,
+      "precision_at_budget": 0.1827956989247312,
+      "recall_at_budget": 0.7542983915696062,
+      "alerts_at_budget": 7440,
+      "alerts_for_80pct_recall": 10988
+    },
+    "test": {
+      "model": "test",
+      "pr_auc": 0.9042406005210883,
+      "roc_auc": 0.9961427711428816,
+      "precision_at_budget": 0.6947040498442367,
+      "recall_at_budget": 0.8742116925174706,
+      "alerts_at_budget": 7383,
+      "alerts_for_80pct_recall": 4931
+    }
+  },
+  "drift_top_features": [
+    {
+      "feature": "in_mean",
+      "psi": 0.0504378935,
+      "status": "stable"
+    },
+    {
+      "feature": "in_max",
+      "psi": 0.039840384,
+      "status": "stable"
+    },
+    {
+      "feature": "burst_in_1h",
+      "psi": 0.0244547039,
+      "status": "stable"
+    },
+    {
+      "feature": "n_unique_src",
+      "psi": 0.0197824347,
+      "status": "stable"
+    },
+    {
+      "feature": "out_sum",
+      "psi": 0.0197618693,
+      "status": "stable"
+    },
+    {
+      "feature": "nbr_in_fan",
+      "psi": 0.019513964,
+      "status": "stable"
+    },
+    {
+      "feature": "g_out_degree",
+      "psi": 0.0178393321,
+      "status": "stable"
+    },
+    {
+      "feature": "nbr_in_g_out_degree",
+      "psi": 0.0163164186,
+      "status": "stable"
+    },
+    {
+      "feature": "fmt_in_cheque",
+      "psi": 0.0093800928,
+      "status": "stable"
+    },
+    {
+      "feature": "burst_out_1h",
+      "psi": 0.0083247376,
+      "status": "stable"
+    }
+  ],
+  "top_features": [
+    "fmt_in_ach",
+    "fmt_ach",
+    "cross_currency_share",
+    "fmt_in_cheque",
+    "nbr_in_cross_currency_share",
+    "n_unique_src",
+    "near_threshold_count",
+    "nbr_in_fmt_ach",
+    "fan",
+    "g_in_degree"
+  ]
+}

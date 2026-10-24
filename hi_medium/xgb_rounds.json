@@ -1,0 +1,19 @@
+{
+ "key": {
+  "params": {
+   "max_depth": 8,
+   "learning_rate": 0.03,
+   "min_child_weight": 20,
+   "subsample": 1.0,
+   "colsample_bytree": 0.9,
+   "reg_lambda": 20.0,
+   "gamma": 0.0,
+   "pos_weight_mode": "none"
+  },
+  "max_rounds": 4000,
+  "n_cols": 77,
+  "n_train": 19038397
+ },
+ "best_iter": 2540,
+ "val_pr_auc": 0.6104446962266292
+}
